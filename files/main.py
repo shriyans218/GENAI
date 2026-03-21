@@ -26,7 +26,7 @@ Do not include any explanation or markdown. Return raw JSON only.
 
 agent = LlmAgent(
     name="smartsummariser",
-    model="gemini-2.0-flash",
+    model="gemini-2.0-flash-lite",
     instruction=SYSTEM_PROMPT,
 )
 
