@@ -45,4 +45,4 @@ async def summarise(request: SummariseRequest):
 
 @app.get("/")
 def health():
-    return {"status": "SmartSummariser is running", "model": "llama3-8b-8192 via Groq"}
+    return {"status": "SmartSummariser is running", "model": "GEMINI"}
