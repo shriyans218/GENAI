@@ -1,17 +1,15 @@
 import os
+import json
 from fastapi import FastAPI
 from pydantic import BaseModel
-from google.adk.agents import LlmAgent
-from google.adk.runners import Runner
-from google.adk.sessions import InMemorySessionService
-from google.genai import types
+from groq import Groq
 
-app = FastAPI()
+app = FastAPI(title="SmartSummariser", description="AI Text Summarisation Agent")
 
-# --- Agent Definition ---
-SYSTEM_PROMPT = """
-You are a professional text summarisation agent.
-When given any text, respond ONLY with a valid JSON object in this exact format:
+client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+
+SYSTEM_PROMPT = """You are a professional text summarisation agent.
+When given any text, respond ONLY with a valid JSON object in this exact format (no markdown, no backticks, no explanation):
 {
   "headline": "One-line headline summarising the text",
   "summary": "A 3-sentence summary of the text.",
@@ -20,51 +18,31 @@ When given any text, respond ONLY with a valid JSON object in this exact format:
     "Key point 2",
     "Key point 3"
   ]
-}
-Do not include any explanation or markdown. Return raw JSON only.
-"""
+}"""
 
-agent = LlmAgent(
-    name="smartsummariser",
-    model="gemini-2.0-flash-lite",
-    instruction=SYSTEM_PROMPT,
-)
-
-session_service = InMemorySessionService()
-runner = Runner(agent=agent, app_name="smartsummariser", session_service=session_service)
-
-# --- Request/Response Schema ---
 class SummariseRequest(BaseModel):
     text: str
 
-# --- Endpoint ---
 @app.post("/summarise")
 async def summarise(request: SummariseRequest):
-    session = await session_service.create_session(
-        app_name="smartsummariser",
-        user_id="user",
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": request.text}
+        ],
+        temperature=0.3,
     )
-    message = types.Content(
-        role="user",
-        parts=[types.Part(text=request.text)]
-    )
-    result_text = ""
-    async for event in runner.run_async(
-        user_id="user",
-        session_id=session.id,
-        new_message=message,
-    ):
-        if event.is_final_response() and event.content:
-            for part in event.content.parts:
-                if part.text:
-                    result_text += part.text
-
-    import json
+    raw = response.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
     try:
-        return json.loads(result_text)
+        return json.loads(raw)
     except Exception:
-        return {"raw_response": result_text}
+        return {"raw_response": raw}
 
 @app.get("/")
 def health():
-    return {"status": "SmartSummariser is running"}
+    return {"status": "SmartSummariser is running", "model": "llama3-8b-8192 via Groq"}
